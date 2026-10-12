@@ -28,6 +28,9 @@ sys.exit(
             "--durations=20",
             "--timeout=60",
             "-v",
+            # coverage of an installed compiled wheel is meaningless, and coverage's
+            # pure-Python tracer (no cp310-win_arm64 wheel) trips the 60s timeout
+            "--no-cov",
             "-p",
             "no:cacheprovider",
             f"--junitxml={junit}",
