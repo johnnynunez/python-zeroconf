@@ -1,0 +1,63 @@
+name: Verify Windows ARM64 wheels
+
+# Verification-only workflow for a contributor fork: same cibuildwheel step as
+# the build_wheels job in ci.yml (no release gating, no publishing), plus the
+# project's pytest suite run against each installed wheel.
+
+on:
+  push:
+    branches:
+      - verify/windows-arm64-wheels
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build_wheels:
+    name: Wheels for ${{ matrix.os }} ${{ matrix.pyver }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-11-arm]
+        pyver: [cp310, cp311, cp312, cp313, cp314, cp314t, cp315, cp315t]
+        archs: [auto]
+        include:
+          # x64 control lane: same tests against the existing win_amd64 wheels
+          - os: windows-latest
+            pyver: ""
+            archs: AMD64
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          fetch-depth: 0
+      - name: Show source revision
+        shell: bash
+        run: git log -3 --format='%H %s'
+      # Used to host cibuildwheel
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v5
+        with:
+          python-version: "3.12"
+      - name: Limit to a specific Python version
+        if: ${{ matrix.pyver }}
+        shell: bash
+        run: echo "CIBW_BUILD=${{ matrix.pyver }}-*" >> "$GITHUB_ENV"
+      - name: Build and test wheels
+        uses: pypa/cibuildwheel@e090b81e30c4d855ea63bf4b6e59204c09a101ae # v4.2.1
+        env:
+          CIBW_SKIP: cp38-* cp39-* pp38-* pp39-* *musllinux*
+          CIBW_ARCHS_WINDOWS: ${{ matrix.archs }}
+          REQUIRE_CYTHON: 1
+          CIBW_TEST_REQUIRES: pytest pytest-asyncio pytest-timeout pytest-cov pytest-codspeed blockbuster hypothesis
+          CIBW_TEST_SOURCES: tests pyproject.toml .github/verify_wheel_tests.py
+          CIBW_TEST_COMMAND: python .github/verify_wheel_tests.py {project}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        if: always()
+        with:
+          name: verify-${{ matrix.os }}-${{ matrix.archs }}-${{ matrix.pyver }}
+          path: |
+            ./wheelhouse/*.whl
+            ./junit/*.xml
+          if-no-files-found: warn
